@@ -3,14 +3,18 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/mux"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func (s *Server) signup(w http.ResponseWriter, r *http.Request) {
 	var user User
+	tx, _ := s.db.Begin()
+	defer tx.Rollback()
 	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -21,20 +25,30 @@ func (s *Server) signup(w http.ResponseWriter, r *http.Request) {
 	err := s.db.QueryRow("SELECT COUNT(*) FROM users WHERE email = ?", user.Email).Scan(&count)
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
+		fmt.Println("Database error")
 		return
 	}
 	if count > 0 {
 		http.Error(w, "Email already registered", http.StatusConflict)
+		fmt.Println("Email already registered")
 		return
 	}
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	if err != nil {
+		http.Error(w, "Failed to hash password", http.StatusInternalServerError)
+		fmt.Println("Failed to hash password")
+		return
+	}
+	hashedPasswordStr := string(hashedPassword)
 
-	// Insert user (in production, hash the password!)
+	// Store hashed password
 	result, err := s.db.Exec(
 		"INSERT INTO users (username, email, password) VALUES (?, ?, ?)",
-		user.Username, user.Email, user.Password,
+		user.Username, user.Email, hashedPasswordStr,
 	)
 	if err != nil {
-		http.Error(w, "Failed to create user", http.StatusInternalServerError)
+		http.Error(w, "Failed to Store password", http.StatusInternalServerError)
+		fmt.Println("Failed to Store password")
 		return
 	}
 
@@ -42,6 +56,11 @@ func (s *Server) signup(w http.ResponseWriter, r *http.Request) {
 	user.ID = int(id)
 	user.Password = "" // Don't send password back
 
+	if err := tx.Commit(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		fmt.Println("Commit error", err.Error())
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(user)
 }
@@ -54,18 +73,29 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var user User
+	var hashedPassword string
+
 	err := s.db.QueryRow(
-		"SELECT id, username, email FROM users WHERE email = ? AND password = ?",
-		credentials.Email, credentials.Password,
-	).Scan(&user.ID, &user.Username, &user.Email)
+		"SELECT id, username, email, password FROM users WHERE email = ?",
+		credentials.Email,
+	).Scan(&user.ID, &user.Username, &user.Email, &hashedPassword)
 
 	if err == sql.ErrNoRows {
 		http.Error(w, "Invalid email or password", http.StatusUnauthorized)
+		fmt.Println("Invalid email")
 		return
 	} else if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
+		fmt.Println("Database error")
 		return
 	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(credentials.Password)); err != nil {
+		http.Error(w, "Invalid email or password", http.StatusUnauthorized)
+		fmt.Println("Invalid password")
+		return
+	}
+	user.Password = "" // Delete password before sending back
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(user)
