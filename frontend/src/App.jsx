@@ -13,6 +13,10 @@ const App = () => {
     loadEvents();
   }, []);
 
+  const showMessage = (type, text) => {
+    setMessage({ type, text });
+  };
+
   const loadEvents = async () => {
     try {
       const response = await fetch('/api/events');
@@ -69,30 +73,33 @@ const App = () => {
 
       const response = await fetch('/api/purchase', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items })
       });
 
       if (response.ok) {
-        showMessage('success', 'Purchase successful! Your tickets have been confirmed.');
+        showMessage('success', 'Purchase successful!');
         setCart([]);
         loadEvents();
       } else {
-        const error = await response.text();
-        showMessage('error', error || 'Purchase failed');
+        // 1. Refresh the event list to get latest 'available' counts
+        const eventsRes = await fetch('/api/events');
+        const latestEvents = await eventsRes.json();
+        setEvents(latestEvents);
+
+        // 2. Filter out items from the cart that are now sold out
+        setCart(prevCart => prevCart.filter(cartItem => {
+          const freshEventData = latestEvents.find(e => e.id === cartItem.event.id);
+          return freshEventData && freshEventData.available > 0;
+        }));
+
+        showMessage('error', 'Purchase Failed!! Some items sold out and were removed from your cart.');
       }
     } catch (error) {
       showMessage('error', 'Purchase failed. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const showMessage = (type, text) => {
-    setMessage({ type, text });
-    setTimeout(() => setMessage(null), 3000);
   };
 
   const cartTotal = cart.reduce((sum, item) => sum + (item.event.price * item.quantity), 0);
@@ -229,6 +236,16 @@ const App = () => {
                     </div>
                   </div>
 
+                  {/* --- Inline Message Section --- */}
+                  {message && (
+                    <div className={`mb-4 p-3 rounded text-sm flex items-center gap-2 animate-pulse ${
+                      message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                    }`}>
+                      {message.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                      <span>{message.text}</span>
+                    </div>
+                  )}
+
                   <button
                     onClick={checkout}
                     disabled={loading}
@@ -242,6 +259,41 @@ const App = () => {
           </div>
         </div>
       </div>
+      {/* Inside the Shopping Cart column, above the Checkout button */}
+{message && (
+  <div className={`mb-4 p-4 rounded-lg border-2 shadow-md animate-in zoom-in-95 duration-200 ${
+    message.type === 'success' 
+      ? 'bg-green-50 border-green-500 text-green-900' 
+      : 'bg-red-50 border-red-500 text-red-900'
+  }`}>
+    <div className="flex items-start gap-3">
+      {message.type === 'success' ? (
+              <CheckCircle className="w-6 h-6 text-green-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-6 h-6 text-red-600 shrink-0" />
+            )}
+            
+            <div className="flex-1">
+              <p className="font-black uppercase text-xs tracking-wider mb-1">
+                {message.type === 'success' ? 'Confirmed' : 'Action Required'}
+              </p>
+              <p className="text-sm font-medium leading-tight">
+                {message.text}
+              </p>
+            </div>
+
+            <button 
+              onClick={() => setMessage(null)}
+              className="shrink-0 bg-white/50 hover:bg-white rounded-md p-1 transition-all border border-black/10 shadow-sm"
+              title="Dismiss notification"
+            >
+              <span className="text-xl leading-none block w-4 h-4 flex items-center justify-center font-bold">
+                &times;
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
