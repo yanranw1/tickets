@@ -121,16 +121,21 @@ func (s *Server) purchaseTickets(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		for i := 0; i < item.Quantity; i++ {
+			_, err = tx.Exec(`
+				INSERT INTO purchases (user_id, event_id, quantity, purchase_date, total_price)
+				SELECT ?, id, 1, ?, price
+				FROM events WHERE id = ?
+			`, req.UserID, time.Now(), item.EventID)
 
-		_, err = tx.Exec(`
-			INSERT INTO purchases (user_id, event_id, quantity, purchase_date, total_price)
-			SELECT ?, id, ?, ?, price * ?
-			FROM events WHERE id = ?
-		`, req.UserID, item.Quantity, time.Now(), item.Quantity, item.EventID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				print("here", err.Error())
+				return
+			}
+
 		}
+
 	}
 
 	if err := tx.Commit(); err != nil {
