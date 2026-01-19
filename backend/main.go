@@ -25,8 +25,14 @@ func main() {
 	server := &Server{db: db}
 	r := mux.NewRouter()
 
+	r.HandleFunc("/api/signup", server.signup).Methods("POST")
+	r.HandleFunc("/api/login", server.login).Methods("POST")
+
 	r.HandleFunc("/api/events", server.getEvents).Methods("GET")
 	r.HandleFunc("/api/purchase", server.purchaseTickets).Methods("POST")
+
+	r.HandleFunc("/api/user/{id}/tickets", server.getUserTickets).Methods("GET")
+	r.HandleFunc("/api/tickets/{id}/use", server.markTicketAsUsed).Methods("POST")
 
 	log.Println("Server running on :8080")
 	log.Fatal(http.ListenAndServe(":8080", corsMiddleware(r)))
