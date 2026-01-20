@@ -18,6 +18,7 @@ const Signup = ({ setView, setCurrentUser, loadEvents, showMessage }) => {
         setCurrentUser(user);
         localStorage.setItem('currentUser', JSON.stringify(user));
         setView('events');
+        showMessage('success', 'Welcome to TicketQueen');
         loadEvents();
       } else {
         showMessage('error', 'Signup failed');
