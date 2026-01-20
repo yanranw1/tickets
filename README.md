@@ -7,6 +7,10 @@ A full-stack ticket purchasing web application built with React, Go, and MySQL. 
 ![MySQL](https://img.shields.io/badge/MySQL-8.0+-4479A1)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+## 🎥 Demo Video
+
+https://youtu.be/SdG4lz0wxqE
+
 ## ✨ Features
 
 ### User Features
